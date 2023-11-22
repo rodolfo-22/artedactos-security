@@ -1,187 +1,131 @@
-#include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SH110X.h>
-#include <Adafruit_Fingerprint.h>
+#include <HardwareSerial.h>
+#include <FPM.h>
 
-#if (defined(__AVR__) || defined(ESP8266)) && !defined(__AVR_ATmega2560__)
-SoftwareSerial mySerial(D6, D5); // TX, RX
-#else
-#define mySerial Serial1
-#endif
+/* Search the fingerprint database for a print */
 
-Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
+HardwareSerial fserial(1);
 
-#define i2c_Address 0x3c
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define OLED_RESET -1
+FPM finger(&fserial);
+FPM_System_Params params;
 
-Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+void setup()
+{
+Serial.begin(115200);
+Serial.println("\n\nAdafruit finger detect test");
+fserial.begin(9600, SERIAL_8N1, 16, 17);
 
-void setup() {
-  Serial.begin(9600);
-  while (!Serial);
-  delay(100);
-  Serial.println("\n\nAdafruit finger detect test");
+if (finger.begin()) {
+Serial.println("Found fingerprint sensor!");
 
-  // Configurar la tasa de datos para el puerto serial del sensor
-  finger.begin(9600);
-  delay(5);
-  if (finger.verifyPassword()) {
-    Serial.println("Found fingerprint sensor!");
-  } else {
-    Serial.println("Did not find fingerprint sensor :(");
-    while (1) { delay(1); }
-  }
-
-  finger.getTemplateCount();
-
-  if (finger.templateCount == 0) {
-    Serial.print("Sensor doesn't contain any fingerprint data. Please run the 'enroll' example.");
-  } else {
-    Serial.print("Sensor contains "); Serial.print(finger.templateCount); Serial.println(" templates");
-  }
-
-  // Inicializar la pantalla OLED
-  display.begin(i2c_Address, true);
-  display.setContrast(255);
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SH110X_WHITE);
+} else {
+Serial.println("Did not find fingerprint sensor :(");
+while (1) yield();
+}
 }
 
-void loop() {
-  uint8_t fingerprintStatus = getFingerprintID();
-  
-  if (fingerprintStatus == FINGERPRINT_OK) {
-    // Mostrar mensaje en la pantalla OLED si la huella es válida
-    display.clearDisplay();
-    display.setTextSize(2);  // Ajustar el tamaño del texto
-    display.setTextColor(SH110X_WHITE);
-
-    // Centrar el texto "Bienvenido" en la pantalla
-    int16_t x, y;
-    uint16_t w, h;
-    display.getTextBounds("Bienvenido", 0, 0, &x, &y, &w, &h);
-    x = (SCREEN_WIDTH - w) / 2;
-    y = (SCREEN_HEIGHT - h) / 2;
-    display.setCursor(x, y);
-    display.print("Bienvenido");
-
-    display.display();
-  } else {
-    // Mostrar mensaje de bloqueo en la pantalla OLED si la huella no es válida
-    display.clearDisplay();
-    display.setTextSize(2.5);
-    display.setTextColor(SH110X_WHITE);
-    
-    // Centrar el texto "Bloqueado"
-    int16_t x, y;
-    uint16_t w, h;
-    display.getTextBounds("Bloqueado", 0, 0, &x, &y, &w, &h);
-    x = (SCREEN_WIDTH - w) / 2;
-    y = (SCREEN_HEIGHT - h) / 2;
-    display.setCursor(x, y);
-    display.print("Bloqueado");
-
-    // Ajustar las coordenadas del candado para centrarlo debajo del texto
-    int candadoSize = 20;
-    int candadoX = (SCREEN_WIDTH - candadoSize) / 2;
-    int candadoY = y + h + 10;  // Aumenté la separación para ajustar el tamaño del texto
-
-    // Dibujar el cuerpo del candado
-    display.drawRect(candadoX + 4, candadoY + 4, candadoSize - 8, candadoSize - 8, SH110X_WHITE);
-
-    // Dibujar el arco superior del candado (simulando el gancho)
-    display.drawCircle(candadoX + candadoSize / 2, candadoY + 8, 4, SH110X_WHITE);
-
-    // Dibujar el arco inferior del candado
-    display.drawCircle(candadoX + candadoSize / 2, candadoY + candadoSize - 4, 4, SH110X_WHITE);
-
-    display.display();
-  }
-
-  delay(100);  // Mantener la velocidad del bucle
+void loop()
+{
+Serial.println("\nIngrese y para buscar una huella digital");
+while (Serial.available() == 0) yield();
+search_database();
+while (Serial.read() != -1);
 }
 
-uint8_t getFingerprintID() {
-  uint8_t p = finger.getImage();
-  switch (p) {
-    case FINGERPRINT_OK:
-      break;
-    case FINGERPRINT_NOFINGER:
-      // Serial.println("No finger detected");
-      return FINGERPRINT_NOFINGER;
-    case FINGERPRINT_PACKETRECIEVEERR:
-      Serial.println("Communication error");
-      return FINGERPRINT_PACKETRECIEVEERR;
-    case FINGERPRINT_IMAGEFAIL:
-      Serial.println("Imaging error");
-      return FINGERPRINT_IMAGEFAIL;
-    default:
-      Serial.println("Unknown error");
-      return 255; // Cambié FINGERPRINT_UNKNOWN a 255
-  }
+int search_database(void) {
+int16_t p = -1;
 
-  // Éxito hasta ahora
-
-  p = finger.image2Tz();
-  switch (p) {
-    case FINGERPRINT_OK:
-      break;
-    case FINGERPRINT_IMAGEMESS:
-      Serial.println("Image too messy");
-      return FINGERPRINT_IMAGEMESS;
-    case FINGERPRINT_PACKETRECIEVEERR:
-      Serial.println("Communication error");
-      return FINGERPRINT_PACKETRECIEVEERR;
-    case FINGERPRINT_FEATUREFAIL:
-      Serial.println("Could not find fingerprint features");
-      return FINGERPRINT_FEATUREFAIL;
-    case FINGERPRINT_INVALIDIMAGE:
-      Serial.println("Could not find fingerprint features");
-      return FINGERPRINT_INVALIDIMAGE;
-    default:
-      Serial.println("Unknown error");
-      return 255; // Cambié FINGERPRINT_UNKNOWN a 255
-  }
-
-  // OK convertido
-
-  p = finger.fingerSearch();
-  if (p == FINGERPRINT_OK) {
-    Serial.println("Found a print match!");
-  } else if (p == FINGERPRINT_PACKETRECIEVEERR) {
-    Serial.println("Communication error");
-    return FINGERPRINT_PACKETRECIEVEERR;
-  } else if (p == FINGERPRINT_NOTFOUND) {
-    // Serial.println("Did not find a match");
-    return FINGERPRINT_NOTFOUND;
-  } else {
-    Serial.println("Unknown error");
-    return 255; // Cambié FINGERPRINT_UNKNOWN a 255
-  }
-
-  // ¡Encontrada una coincidencia!
-  Serial.print("Found ID #"); Serial.print(finger.fingerID);
-  Serial.print(" with confidence of "); Serial.println(finger.confidence);
-
-  return FINGERPRINT_OK;
+/* first get the finger image */
+Serial.println("Waiting for valid finger");
+while (p != FPM_OK) {
+p = finger.getImage();
+switch (p) {
+case FPM_OK:
+Serial.println("Digital Capturada!");
+break;
+case FPM_NOFINGER:
+Serial.println(".");
+break;
+case FPM_PACKETRECIEVEERR:
+Serial.println("Erro de comunicacion");
+break;
+case FPM_IMAGEFAIL:
+Serial.println("Erro de Digital");
+break;
+case FPM_TIMEOUT:
+Serial.println("Tempo Excedido!");
+break;
+case FPM_READ_ERROR:
+Serial.println("Got wrong PID or length!");
+break;
+default:
+Serial.println("Erro desconocido");
+break;
+}
+yield();
 }
 
-int getFingerprintIDez() {
-  uint8_t p = finger.getImage();
-  if (p != FINGERPRINT_OK)  return -1;
-
-  p = finger.image2Tz();
-  if (p != FINGERPRINT_OK)  return -1;
-
-  p = finger.fingerFastSearch();
-  if (p != FINGERPRINT_OK)  return -1;
-
-  // ¡Encontrada una coincidencia!
-  Serial.print("Found ID #"); Serial.print(finger.fingerID);
-  Serial.print(" with confidence of "); Serial.println(finger.confidence);
-  return finger.fingerID;
+/* convert it */
+p = finger.image2Tz();
+switch (p) {
+case FPM_OK:
+Serial.println("Digital Convertida");
+break;
+case FPM_IMAGEMESS:
+Serial.println("Digital Mal Capturada");
+return p;
+case FPM_PACKETRECIEVEERR:
+Serial.println("Erro de Comunicação");
+return p;
+case FPM_FEATUREFAIL:
+Serial.println("Não Consigo encontrar Digital");
+return p;
+case FPM_INVALIDIMAGE:
+Serial.println("Could not find fingerprint features");
+return p;
+case FPM_TIMEOUT:
+Serial.println("Tempo Acabou!");
+return p;
+case FPM_READ_ERROR:
+Serial.println("Got wrong PID or length!");
+return p;
+default:
+Serial.println("Erro desconhecido");
+return p;
 }
 
+/* search the database for the converted print */
+uint16_t fid, score;
+p = finger.searchDatabase(&fid, &score);
+
+/* now wait to remove the finger, though not necessary;
+this was moved here after the search because of the R503 sensor,
+which seems to wipe its buffers after each scan */
+Serial.println("Tire o Dedo");
+while (finger.getImage() != FPM_NOFINGER) {
+delay(500);
+}
+Serial.println();
+
+if (p == FPM_OK) {
+Serial.println("Digital Encontrada!");
+} else if (p == FPM_PACKETRECIEVEERR) {
+Serial.println("Erro de comunicação");
+return p;
+} else if (p == FPM_NOTFOUND) {
+Serial.println("Digital não encontrada");
+return p;
+} else if (p == FPM_TIMEOUT) {
+Serial.println("Tempo Acabou!");
+return p;
+} else if (p == FPM_READ_ERROR) {
+Serial.println("Got wrong PID or length!");
+return p;
+} else {
+Serial.println("Erro desconhecido");
+return p;
+}
+
+// found a match!
+Serial.print("Encontrado ID #"); Serial.print(fid);
+Serial.print(" Com confiança de "); Serial.println(score);
+}
