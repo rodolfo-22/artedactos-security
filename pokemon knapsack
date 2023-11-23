@@ -1,0 +1,54 @@
+#include <iostream>
+
+using namespace std;
+
+const int MAX_N = 1001;
+const int MAX_K = 1001;
+
+/*
+    Implementación DP para el 0/1 Knapsack Problem.
+*/
+int knapsack(int K, int vitamins[][2], int n) {
+    // Se crea la matriz para almacenar subproblemas y soluciones parciales.
+    int M[MAX_N][MAX_K];
+
+    // Se llena la matriz utilizando programación dinámica.
+    for (int i = 0; i <= n; ++i) {
+        for (int j = 0; j <= K; ++j) {
+            if (i == 0 || j == 0) {
+                M[i][j] = 0;
+            } else if (vitamins[i - 1][0] <= j) {
+                M[i][j] = max(vitamins[i - 1][1] + M[i - 1][j - vitamins[i - 1][0]], M[i - 1][j]);
+            } else {
+                M[i][j] = M[i - 1][j];
+            }
+        }
+    }
+
+    return M[n][K];
+}
+
+int main() {
+    int t; // Número de casos de prueba
+    cout << "Ingrese el numero de test cases"<< ".\n";
+    cin >> t;
+
+    while (t--) {
+        int G; // Capacidad del gauge para el Pokémon
+        cin >> G;
+
+        int V; // Número de vitaminas disponibles para el Pokémon
+        cin >> V;
+
+        int vitamins[MAX_N][2]; // Arreglo para almacenar las parejas de (F, B)
+        for (int i = 0; i < V; ++i) {
+            cin >> vitamins[i][0] >> vitamins[i][1];
+        }
+
+        int maxBoost = knapsack(G, vitamins, V);
+
+        cout << "Maximum boost for this Pokemon is: " << maxBoost << ".\n";
+    }
+
+    return 0;
+}
